@@ -1,0 +1,68 @@
+--- ##########Lemaev Mikhail#########
+- name: Installation and starting Docker image with Python in it !
+  hosts: localhost
+  become: yes 
+  vars_prompt:
+    - name: dir
+      prompt: "Enter the path where you want to create a dir or press Enter for skip! Example : /home/new/dir"
+      private: no 
+  tasks:
+    - name: Printing User name
+      debug:
+        msg: Hello {{ str1 }} {{ str2 }}
+    - name: Checking for docker in the system 
+      stat: 
+        path: /etc/docker
+      register: finddir
+    
+    - block:                                     # Whole block will be executed if the docker does not exist on machine ! 
+      - name: Installation required packages 
+        yum: name={{ item }} state=latest 
+        loop:
+          - yum-utils
+          - lvm2
+          - yum-utils
+      - name: Add repository for Docker installation                                                   #It could be done with module "yum_repository"
+        command: yum-config-manager --add-repo https://download.docker.com/linux/centos/docker-ce.repo 
+      - name: Docker-engine installation 
+        yum: 
+          name: docker-ce 
+          state: latest
+      - name: Starting docker daemon
+        service: name=docker.service state=started enabled=yes
+      when: not finddir.stat.exists or ansible_docker0 == False  
+
+      
+    
+    - name: Creating a dir for local machine!
+      file:
+        path: "{{ dir }}"
+        state: directory
+      ignore_errors: yes                       # This task is just for example , 
+                                               # since i am gonna run it on localhost
+                                               # next step also is not needed! 
+               
+    #- name: Copying docker file for image creation! 
+      #copy: src=/root/ansible/Dockerfile dest=/root/
+
+    - name: Checking for existing container 
+      shell: docker images|grep new|wc -l
+      register: container  
+    - block:
+       - name: Starting build image ! 
+         command: docker build -t new /root/
+      when: container.stdout == "0" 
+
+    - name: Execution the script inside the container
+      pause:
+        prompt: Now start the container from the image 'new' ("docker run -it new") and press enter to see the logs !
+    - name: id from last container execution 
+      shell: docker ps -a|sed -n 2p|cut -d " " -f1
+      register: id
+
+    - name: Checking for last logs from container
+      shell: docker logs -f "{{ id.stdout }}"
+      register: logs
+    - name: Showing output
+      debug:
+        var: logs
